@@ -8,31 +8,36 @@ local StarterGui = game:GetService("StarterGui")
 local HttpService = game:GetService("HttpService")
 local localPlayer = players.LocalPlayer
 
+local players     = game:GetService("Players")
+local tweenService= game:GetService("TweenService")
+local StarterGui  = game:GetService("StarterGui")
+local HttpService = game:GetService("HttpService")
+local localPlayer = players.LocalPlayer
+
 -- =========================
---  CONFIG + WEBHOOK (Best Item + Money + Net Profit + Mutations + Size)
+--  CONFIG + WEBHOOK (single file in Workspace)
 -- =========================
 
--- filesystem (executor) paths
+-- Android-friendly single JSON in Workspace (no subfolder)
 local haveFS = (typeof(isfile)=="function" and typeof(writefile)=="function"
     and typeof(readfile)=="function" and typeof(makefolder)=="function" and typeof(isfolder)=="function")
 
-local CONFIG_DIR  = "workspace/BozakContainerRng"
-local CONFIG_PATH = CONFIG_DIR .. "/config.json"
+local CONFIG_PATH = "workspace/BozakContainerRng_config.json"
 
+-- Ensure Workspace exists (Delta: /storage/emulated/0/Delta/Workspace)
 if haveFS then
     pcall(function()
         if not isfolder("workspace") then makefolder("workspace") end
-        if not isfolder(CONFIG_DIR) then makefolder(CONFIG_DIR) end
     end)
 end
 
--- runtime config: webhook is NOT hardcoded; edit config.json
+-- Runtime config (webhook not hardcoded)
 local Config = {
-    webhookURL      = "",     -- paste your Discord webhook here (in config.json)
-    webhookEnabled  = true,   -- master enable/disable webhook
-    hourlyEnabled   = true,   -- send embed every hour
-    trackItems      = true,   -- scan notifications to detect best item
-    -- optional mirrors of your existing toggles (persist between runs)
+    webhookURL      = "",     -- paste your Discord webhook here (in the JSON file or via UI textbox)
+    webhookEnabled  = true,
+    hourlyEnabled   = true,   -- send report every hour
+    trackItems      = true,   -- parse notifications to detect best item
+    -- persist your toggles between runs:
     autoBuy         = nil,
     autoFarm        = nil,
     autoCollect     = nil,
@@ -48,7 +53,7 @@ end
 
 local function loadConfig()
     if not haveFS or not isfile(CONFIG_PATH) then
-        -- create a starter config on first run
+        -- first run: write starter config
         local ok, json = pcall(function() return HttpService:JSONEncode(Config) end)
         if ok then pcall(function() writefile(CONFIG_PATH, json) end) end
         return
@@ -734,3 +739,4 @@ task.spawn(function()
         task.wait()
     end
 end)
+
