@@ -1,16 +1,215 @@
 loadstring(game:HttpGet("https://pastefy.app/QSK04J2d/raw"))()
 
--- =========================
---  Container RNG – Patched
--- =========================
-
 -- // Variables \\
 local library = loadstring(game:HttpGet("https://pastefy.app/gUEb2jc7/raw"))()
 local players = game:GetService("Players")
 local tweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
-local UIS = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 local localPlayer = players.LocalPlayer
+
+-- =========================
+--  CONFIG + WEBHOOK (Best Item + Money + Net Profit + Mutations + Size)
+-- =========================
+
+-- filesystem (executor) paths
+local haveFS = (typeof(isfile)=="function" and typeof(writefile)=="function"
+    and typeof(readfile)=="function" and typeof(makefolder)=="function" and typeof(isfolder)=="function")
+
+local CONFIG_DIR  = "workspace/BozakContainerRng"
+local CONFIG_PATH = CONFIG_DIR .. "/config.json"
+
+if haveFS then
+    pcall(function()
+        if not isfolder("workspace") then makefolder("workspace") end
+        if not isfolder(CONFIG_DIR) then makefolder(CONFIG_DIR) end
+    end)
+end
+
+-- runtime config: webhook is NOT hardcoded; edit config.json
+local Config = {
+    webhookURL      = "",     -- paste your Discord webhook here (in config.json)
+    webhookEnabled  = true,   -- master enable/disable webhook
+    hourlyEnabled   = true,   -- send embed every hour
+    trackItems      = true,   -- scan notifications to detect best item
+    -- optional mirrors of your existing toggles (persist between runs)
+    autoBuy         = nil,
+    autoFarm        = nil,
+    autoCollect     = nil,
+    autoSell        = nil,
+    selectedTier    = nil,
+}
+
+local function saveConfig()
+    if not haveFS then return end
+    local ok, json = pcall(function() return HttpService:JSONEncode(Config) end)
+    if ok then pcall(function() writefile(CONFIG_PATH, json) end) end
+end
+
+local function loadConfig()
+    if not haveFS or not isfile(CONFIG_PATH) then
+        -- create a starter config on first run
+        local ok, json = pcall(function() return HttpService:JSONEncode(Config) end)
+        if ok then pcall(function() writefile(CONFIG_PATH, json) end) end
+        return
+    end
+    local ok, json = pcall(function() return readfile(CONFIG_PATH) end)
+    if not ok or not json then return end
+    local ok2, tbl = pcall(function() return HttpService:JSONDecode(json) end)
+    if ok2 and type(tbl)=="table" then
+        for k,v in pairs(tbl) do Config[k]=v end
+    end
+end
+
+loadConfig()
+
+-- HTTP request helper (executor-friendly)
+local function http_post_json(url, bodyTable)
+    if type(url)~="string" or url=="" then return false, "no url" end
+    local ok, bodyStr = pcall(function() return HttpService:JSONEncode(bodyTable) end)
+    if not ok then return false, "encode fail" end
+
+    local req = nil
+    if syn and syn.request then req = syn.request
+    elseif http and http.request then req = http.request
+    elseif http_request then req = http_request
+    elseif request then req = request end
+
+    if req then
+        local resp = req({
+            Url = url,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = bodyStr
+        })
+        return resp and (resp.StatusCode >= 200 and resp.StatusCode < 300), resp
+    else
+        local ok2, err = pcall(function()
+            HttpService:PostAsync(url, bodyStr, Enum.HttpContentType.ApplicationJson)
+        end)
+        return ok2, err
+    end
+end
+
+-- money helpers (safe)
+local function getCurrentMoneySafe()
+    local ok, text = pcall(function()
+        return localPlayer.PlayerGui.CurrencyUI.MainFrame.StatsFrame.Money.Amount.Text
+    end)
+    if not ok or not text then return 0 end
+    return tonumber((text or "0"):gsub(",", "")) or 0
+end
+
+-- session anchors
+local sessionStartMoney = getCurrentMoneySafe()
+local hourAnchorMoney   = sessionStartMoney
+
+-- best item tracking for THIS session
+local bestItem = { name = nil, price = 0, muts = nil, size = nil }
+
+-- parse notification text to update bestItem (very tolerant)
+local function scanAndTrackBestItem()
+    local pg = localPlayer:FindFirstChild("PlayerGui"); if not pg then return end
+    local sg = pg:FindFirstChild("ScreenGui")
+    local nf = sg and sg:FindFirstChild("NotificationFrame")
+    local n  = nf and nf:FindFirstChild("Notification")
+    local lbl= n and n:FindFirstChild("NotificationText")
+    local txt = (lbl and lbl.Text) or ""
+    if type(txt)~="string" or #txt==0 then return end
+
+    -- examples it handles: "You found X worth $1,234,567", "Unboxed X worth $1,234"
+    local name  = txt:match("found%s+([%w%s%p]-)%s+worth") or txt:match("Unboxed%s+([%w%s%p]-)%s+worth")
+    local money = txt:match("%$([%d,]+)")
+    local muts  = txt:match("Mutations:%s*(%d+)") or txt:match("Muts:%s*(%d+)")
+    local size  = txt:match("Size:%s*([%d%.]+)")  -- e.g. Size: 1.23
+
+    if money then
+        local val = tonumber((money:gsub(",", ""))) or 0
+        if val > (bestItem.price or 0) then
+            bestItem.price = val
+            bestItem.name  = name or "Unknown Item"
+            bestItem.muts  = muts or bestItem.muts
+            bestItem.size  = size or bestItem.size
+        end
+    end
+end
+
+-- avatar + username for webhook appearance
+local function getPlayerAvatarUrl()
+    local userId = players.LocalPlayer.UserId
+    return ("https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=420&height=420&format=png"):format(userId)
+end
+
+-- formatting
+local function formatMoney(n)
+    local s = tostring(math.floor(n or 0))
+    local neg = s:sub(1,1)=="-"
+    if neg then s=s:sub(2) end
+    local r = s:reverse():gsub("(%d%d%d)","%1,"):reverse():gsub("^,","")
+    return (neg and "-" or "") .. r
+end
+
+-- webhook: ONLY the most expensive item this session, plus money + net profit + muts/size
+local function sendBestItemWebhook()
+    if not Config.webhookEnabled or (Config.webhookURL or "") == "" then return end
+
+    local nowMoney = getCurrentMoneySafe()
+    local netProfit = nowMoney - sessionStartMoney
+
+    local title = "🏆 Best Item This Session"
+    local description
+
+    if bestItem.price > 0 then
+        description = ("**Item:** %s\n**Worth:** $%s\n**Mutations:** %s\n**Size:** %s\n\n💰 **Current Money:** $%s\n📈 **Net Profit (session):** $%s")
+            :format(
+                bestItem.name or "Unknown Item",
+                formatMoney(bestItem.price),
+                bestItem.muts or "?",
+                bestItem.size or "?",
+                formatMoney(nowMoney),
+                formatMoney(netProfit)
+            )
+    else
+        description = ("_No item detected yet this session._\n\n💰 **Current Money:** $%s\n📈 **Net Profit (session):** $%s")
+            :format(formatMoney(nowMoney), formatMoney(netProfit))
+    end
+
+    local payload = {
+        username = players.LocalPlayer.Name,
+        avatar_url = getPlayerAvatarUrl(),
+        embeds = {{
+            title = title,
+            description = description,
+            color = 0x00B2FF,
+            timestamp = DateTime.now():ToIsoDate(),
+            footer = { text = "Container RNG Auto Report" }
+        }}
+    }
+
+    http_post_json(Config.webhookURL, payload)
+end
+
+-- light background jobs:
+-- A) Scrape notifications (best item tracker)
+task.spawn(function()
+    while true do
+        if Config.trackItems then
+            pcall(scanAndTrackBestItem)
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- B) Hourly embed (best item only + money + profit)
+task.spawn(function()
+    while true do
+        for _ = 1, 3600 do task.wait(1) end
+        if Config.hourlyEnabled then
+            pcall(sendBestItemWebhook)
+            hourAnchorMoney = getCurrentMoneySafe()
+        end
+    end
+end)
 
 -- Toggles
 local selectedContainer = "Junk"
@@ -18,6 +217,26 @@ local autoBuyContainer = false
 local autoFarmContainers = false
 local autoCollectItems = false
 local autoSellItems = false
+
+-- load any persisted toggles
+if type(Config.autoBuy)=="boolean" then autoBuyContainer = Config.autoBuy end
+if type(Config.autoFarm)=="boolean" then autoFarmContainers = Config.autoFarm end
+if type(Config.autoCollect)=="boolean" then autoCollectItems = Config.autoCollect end
+if type(Config.autoSell)=="boolean" then autoSellItems = Config.autoSell end
+if type(Config.selectedTier)=="string" then selectedContainer = Config.selectedTier end
+
+-- Autosave the config occasionally (keeps webhook + toggles current)
+task.spawn(function()
+    while true do
+        task.wait(20)
+        Config.autoBuy       = autoBuyContainer
+        Config.autoFarm      = autoFarmContainers
+        Config.autoCollect   = autoCollectItems
+        Config.autoSell      = autoSellItems
+        Config.selectedTier  = selectedContainer
+        saveConfig()
+    end
+end)
 
 -- Temps / state
 local localPlot
@@ -180,41 +399,51 @@ local function sell()
     return true
 end
 
--- =========================================
--- UI (build) + Insert-key toggle visibility
--- =========================================
-
--- [UI TOGGLE SNAPSHOT] capture GUIs before creating the window
-local function snapshotGUIs()
-    local set = {}
-    for _, g in ipairs(game:GetService("CoreGui"):GetChildren()) do
-        if g:IsA("ScreenGui") then set[g] = true end
-    end
-    -- some libraries attach to PlayerGui instead
-    local pg = localPlayer:FindFirstChild("PlayerGui")
-    if pg then
-        for _, g in ipairs(pg:GetChildren()) do
-            if g:IsA("ScreenGui") then set[g] = true end
-        end
-    end
-    return set
-end
-
-local beforeSet = snapshotGUIs()
-
--- build your UI
+-- UI
 local window = library.Window()
 local autofarmTab = window.Tab("Autofarm")
 local autoBuySection = autofarmTab.Section("Auto Buy")
-autoBuySection.Toggle("Auto Buy Container", function(on) autoBuyContainer = on end)
+autoBuySection.Toggle("Auto Buy Container", function(on)
+    autoBuyContainer = on
+    Config.autoBuy = on; saveConfig()
+end)
 local autoContainerSection = autofarmTab.Section("Auto Container")
-autoContainerSection.Toggle("Auto Farm Container", function(on) autoFarmContainers = on end)
-autoContainerSection.Toggle("Pick Up Items", function(on) autoCollectItems = on end)
-autoContainerSection.Toggle("Sell Picked Up Items", function(on) autoSellItems = on end)
+autoContainerSection.Toggle("Auto Farm Container", function(on)
+    autoFarmContainers = on
+    Config.autoFarm = on; saveConfig()
+end)
+autoContainerSection.Toggle("Pick Up Items", function(on)
+    autoCollectItems = on
+    Config.autoCollect = on; saveConfig()
+end)
+autoContainerSection.Toggle("Sell Picked Up Items", function(on)
+    autoSellItems = on
+    Config.autoSell = on; saveConfig()
+end)
 local autofarmSettingsSection = autofarmTab.Section("Select")
 local settingsTab = window.Tab("Settings")
 local settingsSection = settingsTab.Section("Settings")
 settingsSection.Slider("Farming Speed", 10, 120, 30, function(v) tweeningSpeed = v end)
+
+-- Webhook UI (paste webhook in-game if your lib supports Textbox)
+local webhookSection = settingsTab.Section("Webhook / Reports")
+webhookSection.Toggle("Enable Webhook", function(on)
+    Config.webhookEnabled = on
+    saveConfig()
+end)
+webhookSection.Toggle("Hourly Embed (Best Item + Money + Profit)", function(on)
+    Config.hourlyEnabled = on
+    saveConfig()
+end)
+if type(webhookSection.Textbox) == "function" then
+    webhookSection.Textbox("Discord Webhook URL", Config.webhookURL or "", function(text)
+        Config.webhookURL = text or ""
+        saveConfig()
+    end)
+end
+webhookSection.Button("Send Best Item Now", function()
+    pcall(sendBestItemWebhook)
+end)
 
 -- Prices (fixed "Deep Space")
 local containerMeta = {
@@ -233,51 +462,9 @@ local containerMeta = {
 local names = {}
 for k in pairs(containerMeta) do table.insert(names, k) end
 table.sort(names)
-autofarmSettingsSection.Dropdown("Container Name", names, "Junk", function(v) selectedContainer = v end)
-
--- figure out which GUIs the library just created
-local afterSet = (function()
-    local now = {}
-    for _, g in ipairs(game:GetService("CoreGui"):GetChildren()) do
-        if g:IsA("ScreenGui") then now[g] = true end
-    end
-    local pg = localPlayer:FindFirstChild("PlayerGui")
-    if pg then
-        for _, g in ipairs(pg:GetChildren()) do
-            if g:IsA("ScreenGui") then now[g] = true end
-        end
-    end
-    return now
-end)()
-
-local managedGUIs = {}
-for gui,_ in pairs(afterSet) do
-    if not beforeSet[gui] then
-        table.insert(managedGUIs, gui)
-    end
-end
-
--- If the library exposes visibility methods, we’ll prefer them.
-local uiVisible = true
-local hasWindowAPI = (type(window.GetVisible) == "function" and type(window.SetVisible) == "function")
-
--- [UI TOGGLE BIND] Insert key to toggle UI visibility
-UIS.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.KeyCode == Enum.KeyCode.Insert then
-        uiVisible = not uiVisible
-        if hasWindowAPI then
-            -- library-supported toggle
-            window:SetVisible(uiVisible)
-        else
-            -- fallback: toggle ScreenGuis we detected
-            for _, gui in ipairs(managedGUIs) do
-                if gui and gui.Parent then
-                    gui.Enabled = uiVisible
-                end
-            end
-        end
-    end
+autofarmSettingsSection.Dropdown("Container Name", names, "Junk", function(v)
+    selectedContainer = v
+    Config.selectedTier = v; saveConfig()
 end)
 
 -- ===== Main Loop =====
@@ -331,6 +518,8 @@ task.spawn(function()
                                         local pp = item:FindFirstChildOfClass("ProximityPrompt") or item:FindFirstChildWhichIsA("ProximityPrompt", true)
                                         if pp then pcall(function() fireproximityprompt(pp) end) end
                                     end
+                                    -- ping parser to catch fresh notifications
+                                    pcall(scanAndTrackBestItem)
                                     local sold = sell()
                                     if sold ~= false then break end
                                 end
@@ -352,7 +541,7 @@ task.spawn(function()
                                     local mp = getWorldPos(model)
                                     if mp and tween(mp) == "success" then
                                         -- WAIT before first collection + MULTI PASS
-                                        task.wait(2)  -- <<< give time for items to spawn
+                                        task.wait(2)  -- give time for items to spawn
 
                                         if itemCache then
                                             for pass = 1, 3 do   -- do a few sweeps for late spawns
@@ -380,6 +569,7 @@ task.spawn(function()
                                                                 local pp = item:FindFirstChildOfClass("ProximityPrompt") or item:FindFirstChildWhichIsA("ProximityPrompt", true)
                                                                 if pp then pcall(function() fireproximityprompt(pp) end) end
                                                             end
+                                                            pcall(scanAndTrackBestItem)
                                                             local sold = sell()
                                                             if sold ~= false then break end
                                                         end
