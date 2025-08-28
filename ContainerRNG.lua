@@ -49,7 +49,6 @@ end
 local function loadConfig()
     if not haveFS then return end
     if not isfile(CONFIG_PATH) then
-        -- create a fresh file only if it truly doesn't exist
         saveConfig()
         return
     end
@@ -291,10 +290,10 @@ if type(webhookSection.Button)=="function" then
             username   = LP.Name,
             avatar_url = avatarUrl(),
             embeds = {{
-                title = "Bozak's Container RNG — Test",
-                description = "Your webhook is working!",
+                title = "Container RNG — Test",
+                description = "This is a test webhook.",
                 color = 0x00FF00,
-                footer = { text = "Bozak's ContainerRNG" }
+                footer = { text = "Bozak ContainerRNG" }
             }}
         }
         http_post_json(Config.webhookURL, payload)
@@ -740,4 +739,3 @@ task.spawn(function()
         task.wait()
     end
 end)
-
