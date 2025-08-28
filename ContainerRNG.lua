@@ -1,11 +1,12 @@
+-- Load Check
 loadstring(game:HttpGet("https://pastefy.app/s4oC5HgR/raw"))()
-
+-- Lib Load
+local library = loadstring(game:HttpGet("https://pastefy.app/gUEb2jc7/raw"))()
 -- =========================
 --  Bozak
 -- =========================
 
 -- // Variables \\
-local library = loadstring(game:HttpGet("https://pastefy.app/gUEb2jc7/raw"))()
 local players = game:GetService("Players")
 local tweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
