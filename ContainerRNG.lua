@@ -312,7 +312,8 @@ local containerMeta = {
     Golden=250000000,Diamond=500000000,
     Emerald=2500000000,Ruby=10000000000,
     Sapphire=75000000000,Space=150000000000,
-    ["Deep Space"]=500000000000,Vortex=1000000000000,["Black Hole"]=2500000000000
+    ["Deep Space"]=500000000000,Vortex=1000000000000,["Black Hole"]=2500000000000,
+    Camo=5000000000000
 }
 local names = {}
 for k in pairs(containerMeta) do table.insert(names, k) end
@@ -735,3 +736,4 @@ task.spawn(function()
         task.wait()
     end
 end)
+
