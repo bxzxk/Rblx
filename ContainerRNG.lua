@@ -285,16 +285,16 @@ if type(webhookSection.Textbox)=="function" then
     end)
 end
 if type(webhookSection.Button)=="function" then
-    webhookSection.Button("Test Webhook", function()
+    webhookSection.Button("Test Webhook (Set Webhook in Config File)", function()
         if (Config.webhookURL or "") == "" then return end
         local payload = {
             username   = LP.Name,
             avatar_url = avatarUrl(),
             embeds = {{
-                title = "Container RNG — Test",
-                description = "This is a test webhook.",
+                title = "Bozak's Container RNG — Test",
+                description = "Your webhook is working!",
                 color = 0x00FF00,
-                footer = { text = "Bozak Auto Reporter" }
+                footer = { text = "Bozak's ContainerRNG" }
             }}
         }
         http_post_json(Config.webhookURL, payload)
@@ -740,3 +740,4 @@ task.spawn(function()
         task.wait()
     end
 end)
+
