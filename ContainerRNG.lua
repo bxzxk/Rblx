@@ -7,7 +7,6 @@ local library = loadstring(game:HttpGet("https://pastefy.app/gUEb2jc7/raw"))()
 --  Bozak
 -- =========================
 
--- // Services \\
 local Players      = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local StarterGui   = game:GetService("StarterGui")
@@ -15,11 +14,10 @@ local UIS          = game:GetService("UserInputService")
 local HttpService  = game:GetService("HttpService")
 local LP           = Players.LocalPlayer
 
--- ========= Filesystem / Config (relative to executor workspace) =========
 local haveFS = (typeof(isfile)=="function" and typeof(writefile)=="function"
     and typeof(readfile)=="function" and typeof(makefolder)=="function" and typeof(isfolder)=="function")
 
-local CONFIG_DIR  = "BozakContainerRNG"              -- <— no "workspace/" prefix
+local CONFIG_DIR  = "BozakContainerRNG"
 local CONFIG_PATH = CONFIG_DIR .. "/config.json"
 if haveFS then
     pcall(function()
@@ -35,7 +33,6 @@ local Config = {
     autoSellItems      = false,
     tweeningSpeed      = 30,
     uiVisible          = true,
-    -- webhook
     webhookEnabled     = true,
     hourlyEnabled      = true,
     webhookURL         = ""
@@ -58,15 +55,11 @@ local function loadConfig()
     end
     local ok2, tbl = pcall(function() return HttpService:JSONDecode(txt) end)
     if ok2 and type(tbl) == "table" then
-        for k, v in pairs(tbl) do
-            Config[k] = v
-        end
+        for k, v in pairs(tbl) do Config[k] = v end
     end
 end
-
 loadConfig()
 
--- Toggles (from config)
 local selectedContainer  = Config.selectedContainer
 local autoBuyContainer   = Config.autoBuyContainer
 local autoFarmContainers = Config.autoFarmContainers
@@ -74,7 +67,6 @@ local autoCollectItems   = Config.autoCollectItems
 local autoSellItems      = Config.autoSellItems
 local tweeningSpeed      = tonumber(Config.tweeningSpeed) or 30
 
--- Temps / state
 local localPlot, itemCache
 local isTweening   = false
 local inventoryFull= false
@@ -82,7 +74,6 @@ local inventoryFull= false
 local http_post_json
 local avatarUrl
 
--- --- Helpers ---
 local function getWorldPos(inst)
     if not inst then return nil end
     if inst:IsA("BasePart") then return inst.Position end
@@ -105,7 +96,25 @@ local function waitUntil(fn, timeout)
     return true
 end
 
--- Robust plot detection (name sign OR owner values)
+-- NEW: resilient PlotLogic finder
+local function getPlotLogic()
+    if not localPlot then return nil end
+    local direct = localPlot:FindFirstChild("PlotLogic")
+    if direct then return direct end
+    for _,d in ipairs(localPlot:GetChildren()) do
+        if d:IsA("Folder") and d:FindFirstChild("ContainerHolder") then
+            return d
+        end
+    end
+    for _,d in ipairs(localPlot:GetDescendants()) do
+        if d:IsA("Folder") then
+            local ok = d:FindFirstChild("ContainerHolder") or d:FindFirstChild("ComputerSystem") or d:FindFirstChild("ContainerSlots")
+            if ok then return d end
+        end
+    end
+    return nil
+end
+
 local function ensureRefs()
     if (not localPlot) or (not localPlot.Parent) then
         local gameplay = workspace:FindFirstChild("Gameplay")
@@ -131,13 +140,11 @@ local function ensureRefs()
             end
         end
     end
-    if localPlot and (not itemCache or not itemCache.Parent) then
-        itemCache = localPlot.PlotLogic and localPlot.PlotLogic:FindFirstChild("ItemCache")
-    end
-    return localPlot ~= nil
+    local pl = getPlotLogic()
+    itemCache = pl and pl:FindFirstChild("ItemCache") or nil
+    return localPlot ~= nil and pl ~= nil
 end
 
--- Safe money parser ("$2.42T", "1,234,567", "450K")
 local function parseShortMoney(s)
     s = tostring(s or "0")
     s = s:gsub("[%$,]", ""):gsub("%s+", "")
@@ -174,7 +181,6 @@ local function commify(n)
     return (neg and "-" or "") .. s
 end
 
--- Tween to world position
 local function tween(position)
     local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
     if not root then return "no root" end
@@ -222,9 +228,6 @@ local function sell()
     return true
 end
 
--- =========================================
--- UI (build) + Insert-key toggle visibility
--- =========================================
 local function snapshotGUIs()
     local set = {}
     for _, g in ipairs(game:GetService("CoreGui"):GetChildren()) do
@@ -241,7 +244,6 @@ end
 
 local beforeSet = snapshotGUIs()
 
--- build UI
 local window = library.Window()
 local autofarmTab = window.Tab("Autofarm")
 
@@ -268,7 +270,6 @@ settingsSection.Slider("Farming Speed", 10, 120, tweeningSpeed, function(v)
     tweeningSpeed = v; Config.tweeningSpeed = v; saveConfig()
 end)
 
--- Webhook UI
 local webhookSection = settingsTab.Section("Webhook")
 if type(webhookSection.Toggle)=="function" then
     webhookSection.Toggle("Enable Webhook", function(on)
@@ -290,17 +291,16 @@ if type(webhookSection.Button)=="function" then
             username   = LP.Name,
             avatar_url = avatarUrl(),
             embeds = {{
-                title = "Container RNG — Test",
-                description = "This is a test webhook.",
+                title = "Bozak's Container RNG — Test",
+                description = "Your webhook is working!",
                 color = 0x00FF00,
-                footer = { text = "Bozak ContainerRNG" }
+                footer = { text = "Bozak's ContainerRNG" }
             }}
         }
         http_post_json(Config.webhookURL, payload)
     end)
 end
 
--- Prices (fixed "Deep Space")
 local containerMeta = {
     Junk=100,Scratched=200,Sealed=700,
     Military=3000,Metal=10000,Frozen=25000,
@@ -321,7 +321,6 @@ autofarmSettingsSection.Dropdown("Container Name", names, selectedContainer, fun
     selectedContainer = v; Config.selectedContainer = v; saveConfig()
 end)
 
--- figure out which GUIs the library just created
 local afterSet = (function()
     local now = {}
     for _, g in ipairs(game:GetService("CoreGui"):GetChildren()) do
@@ -357,9 +356,6 @@ UIS.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- =========================
---  Webhook (hourly: current money + last-hour profit)
--- =========================
 http_post_json = function(url, bodyTable)
     if type(url)~="string" or url=="" then return false end
     local ok, bodyStr = pcall(function() return HttpService:JSONEncode(bodyTable) end)
@@ -411,13 +407,10 @@ task.spawn(function()
     while true do task.wait(20) saveConfig() end
 end)
 
--- =========================
---  Anti-stuck watchdog
--- =========================
 local function homePos()
     if not ensureRefs() then return nil end
-    local cf = localPlot:GetPivot()
-    return cf and (cf.Position + Vector3.new(0,6,0)) or nil
+    local ok, cf = pcall(function() return localPlot:GetPivot() end)
+    return ok and cf and (cf.Position + Vector3.new(0,6,0)) or nil
 end
 local function forceUnstick()
     local char = Players.LocalPlayer.Character
@@ -457,13 +450,12 @@ task.spawn(function()
     end
 end)
 
--- ===== Main Loop =====
 task.spawn(function()
     ensureRefs()
-    itemCache = localPlot and localPlot.PlotLogic and localPlot.PlotLogic:FindFirstChild("ItemCache")
+    local pl0 = getPlotLogic()
+    itemCache = pl0 and pl0:FindFirstChild("ItemCache") or nil
 
     repeat
-        -- close StarterPack popup if present
         pcall(function()
             local sp = LP.PlayerGui.MenusUI:FindFirstChild("StarterPack")
             if sp and sp:FindFirstChild("CloseButton") then
@@ -471,10 +463,14 @@ task.spawn(function()
             end
         end)
 
-        if ensureRefs() and #localPlot.PlotLogic.ContainerHolder:GetChildren() ~= 0 then
-            -- ===== FARM =====
+        if not ensureRefs() then task.wait(0.2); continue end
+        local plotLogic = getPlotLogic()
+        if not plotLogic then task.wait(0.2); continue end
+        local holderFolder = plotLogic:FindFirstChild("ContainerHolder")
+
+        if holderFolder and #holderFolder:GetChildren() ~= 0 then
             if autoFarmContainers and not inventoryFull then
-                for idx, model in ipairs(localPlot.PlotLogic.ContainerHolder:GetChildren()) do
+                for idx, model in ipairs(holderFolder:GetChildren()) do
                     if not model or not model.Parent then continue end
 
                     local logic  = model:FindFirstChild("ContainerLogic")
@@ -483,7 +479,6 @@ task.spawn(function()
                                     or holder:FindFirstChildWhichIsA("ProximityPrompt", true))
 
                     if holder and not prompt then
-                        -- try pick-up pass (same as your original)
                         if itemCache then
                             for _, item in ipairs(itemCache:GetChildren()) do
                                 local primary = item:FindFirstChild("PrimaryPart")
@@ -514,7 +509,6 @@ task.spawn(function()
                             end
                         end
                     else
-                        -- open container
                         task.wait(0.2)
                         local p = getWorldPos(holder)
                         if p then
@@ -528,13 +522,12 @@ task.spawn(function()
                                 if autoCollectItems then
                                     local mp = getWorldPos(model)
                                     if mp and tween(mp) == "success" then
-                                        task.wait(2) -- give items time to spawn
+                                        task.wait(2)
                                         if itemCache then
                                             for pass = 1, 3 do
                                                 if pass > 1 then task.wait(1.5) end
                                                 for _, item in ipairs(itemCache:GetChildren()) do
-                                                    local primary = item:FindFirstChild("PrimaryPart")
-                                                    if not primary then continue end
+                                                    local primary = item:FindFirstChild("PrimaryPart"); if not primary then continue end
                                                     local itemPos = primary.Position
                                                     local contPos = getWorldPos(model:FindFirstChild("Container")) or getWorldPos(model)
                                                     if not contPos then continue end
@@ -569,9 +562,8 @@ task.spawn(function()
             end
 
         else
-            -- ======= AUTO-BUY with RETRIES =======
             if autoBuyContainer then
-                local holder = localPlot.PlotLogic and localPlot.PlotLogic:FindFirstChild("ContainerHolder")
+                local holder = plotLogic and plotLogic:FindFirstChild("ContainerHolder")
                 if not (holder and #holder:GetChildren() > 0) then
 
                     local function findClickableForLabel(txt, ignoreAncestorName)
@@ -602,9 +594,9 @@ task.spawn(function()
 
                     local function openComputer()
                         if not ensureRefs() then return false end
-                        local comp = localPlot.PlotLogic
-                            and localPlot.PlotLogic:FindFirstChild("ComputerSystem")
-                            and localPlot.PlotLogic.ComputerSystem:FindFirstChild("ComputerProximityHolder")
+                        local pl = getPlotLogic(); if not pl then return false end
+                        local comp = pl:FindFirstChild("ComputerSystem")
+                        comp = comp and comp:FindFirstChild("ComputerProximityHolder")
                         local pos = getWorldPos(comp); if not pos then return false end
                         if tween(Vector3.new(pos.X, pos.Y + 5, pos.Z)) == "no root" then return false end
                         local pp = comp and (comp:FindFirstChildOfClass("ProximityPrompt")
@@ -639,7 +631,8 @@ task.spawn(function()
 
                     local function getMaxContainers()
                         if not ensureRefs() then return 0 end
-                        local slotsFolder = localPlot.PlotLogic:FindFirstChild("ContainerSlots")
+                        local pl = getPlotLogic(); if not pl then return 0 end
+                        local slotsFolder = pl:FindFirstChild("ContainerSlots")
                         if not slotsFolder then return 0 end
                         local badColor = "0 1 0 0 0 1 1 0 0 0 "
                         local slots = 0
@@ -651,7 +644,8 @@ task.spawn(function()
                     end
 
                     local function buyToFill()
-                        local h = localPlot.PlotLogic and localPlot.PlotLogic:FindFirstChild("ContainerHolder")
+                        local pl = getPlotLogic(); if not pl then return false end
+                        local h = pl:FindFirstChild("ContainerHolder")
                         if not h then return false end
                         local toFill = math.max(0, getMaxContainers() - #h:GetChildren())
                         if toFill <= 0 then return true end
@@ -673,7 +667,8 @@ task.spawn(function()
                             if closeBtn then firesignal(closeBtn.MouseButton1Click) end
                         end)
                         local ok = waitUntil(function()
-                            local hh = localPlot.PlotLogic and localPlot.PlotLogic:FindFirstChild("ContainerHolder")
+                            local pl2 = getPlotLogic()
+                            local hh = pl2 and pl2:FindFirstChild("ContainerHolder")
                             return hh and (#hh:GetChildren() == getMaxContainers() or #hh:GetChildren() > 0) or false
                         end, 30)
                         return ok
@@ -682,7 +677,8 @@ task.spawn(function()
                     local function buySelectedContainerWithRetry(name, retries)
                         retries = retries or 4
                         for attempt = 1, retries do
-                            local hh = localPlot.PlotLogic and localPlot.PlotLogic:FindFirstChild("ContainerHolder")
+                            local pl = getPlotLogic()
+                            local hh = pl and pl:FindFirstChild("ContainerHolder")
                             if hh and #hh:GetChildren() > 0 then return true end
                             StarterGui:SetCore("SendNotification", {
                                 Title = ("Buying (attempt %d/%d)"):format(attempt, retries),
@@ -695,7 +691,8 @@ task.spawn(function()
                                 if buyToFill() then return true end
                             end
                             local appeared = waitUntil(function()
-                                local h2 = localPlot.PlotLogic and localPlot.PlotLogic:FindFirstChild("ContainerHolder")
+                                local pl2 = getPlotLogic()
+                                local h2 = pl2 and pl2:FindFirstChild("ContainerHolder")
                                 return h2 and #h2:GetChildren() > 0
                             end, math.max(1, 0.75 * attempt))
                             if appeared then return true end
@@ -719,7 +716,6 @@ task.spawn(function()
     until false
 end)
 
--- // Tweening safety loop \\
 task.spawn(function()
     while true do
         local char = LP.Character
