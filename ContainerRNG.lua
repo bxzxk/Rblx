@@ -38,26 +38,55 @@ local Config = {
     webhookURL         = ""
 }
 
-local function saveConfig()
-    if not haveFS then return end
-    local ok, json = pcall(function() return HttpService:JSONEncode(Config) end)
-    if ok then pcall(function() writefile(CONFIG_PATH, json) end) end
+local function readConfigFile()
+    if not haveFS or not isfile(CONFIG_PATH) then return nil end
+    local ok, txt = pcall(function() return readfile(CONFIG_PATH) end)
+    if not ok or not txt or txt == "" then return nil end
+    local ok2, tbl = pcall(function() return HttpService:JSONDecode(txt) end)
+    if ok2 and type(tbl)=="table" then return tbl end
+    return nil
 end
+
 local function loadConfig()
     if not haveFS then return end
-    if not isfile(CONFIG_PATH) then
-        saveConfig()
+    local existing = readConfigFile()
+    if not existing then
+        -- write an initial file with current defaults (no destructive merge)
+        local ok, json = pcall(function() return HttpService:JSONEncode(Config) end)
+        if ok then pcall(function() writefile(CONFIG_PATH, json) end) end
         return
     end
-    local ok, txt = pcall(function() return readfile(CONFIG_PATH) end)
-    if not ok or not txt or txt == "" then
-        return
-    end
-    local ok2, tbl = pcall(function() return HttpService:JSONDecode(txt) end)
-    if ok2 and type(tbl) == "table" then
-        for k, v in pairs(tbl) do Config[k] = v end
+    for k, v in pairs(existing) do
+        Config[k] = v
     end
 end
+
+-- merge-save that preserves a non-empty webhookURL already on disk
+local saveQueued = false
+local function saveConfig()
+    if not haveFS then return end
+    if saveQueued then return end
+    saveQueued = true
+    task.defer(function()
+        local disk = readConfigFile() or {}
+        local out = {}
+        for k, v in pairs(Config) do
+            if k == "webhookURL" then
+                out[k] = (v and v ~= "") and v or (disk.webhookURL or "")
+            else
+                out[k] = v
+            end
+        end
+        -- also carry forward any unknown keys from disk (future-proof)
+        for k, v in pairs(disk) do
+            if out[k] == nil then out[k] = v end
+        end
+        local ok, json = pcall(function() return HttpService:JSONEncode(out) end)
+        if ok then pcall(function() writefile(CONFIG_PATH, json) end) end
+        saveQueued = false
+    end)
+end
+
 loadConfig()
 
 local selectedContainer  = Config.selectedContainer
@@ -96,7 +125,7 @@ local function waitUntil(fn, timeout)
     return true
 end
 
--- NEW: resilient PlotLogic finder
+-- resilient PlotLogic finder
 local function getPlotLogic()
     if not localPlot then return nil end
     local direct = localPlot:FindFirstChild("PlotLogic")
@@ -397,6 +426,12 @@ local function sendHourlyWebhook()
     }
     http_post_json(Config.webhookURL, payload)
 end
+
+-- send one report on load so you can confirm webhook is working
+task.defer(function()
+    task.wait(1)
+    pcall(sendHourlyWebhook)
+end)
 
 task.spawn(function()
     while true do
@@ -736,4 +771,3 @@ task.spawn(function()
         task.wait()
     end
 end)
-
