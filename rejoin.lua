@@ -8,7 +8,7 @@ local placeId = game.PlaceId
 local function reconnect()
     while true do
         -- small delay so it doesn’t spam requests
-        task.wait(5)
+        task.wait(15)
 
         -- try teleporting back
         local success, err = pcall(function()
@@ -28,3 +28,4 @@ GuiService.ErrorMessageChanged:Connect(function()
     task.wait(2)
     reconnect()
 end)
+
