@@ -1,7 +1,9 @@
+-- wait for the useless loading screen
 task.wait(5.5)
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/bxzxk/Rblx/refs/heads/main/bsbossjumpbase.lua"))()
 
+-- failsafe
 task.delay(300, function()
     local HttpService = game:GetService("HttpService")
     local TeleportService = game:GetService("TeleportService")
