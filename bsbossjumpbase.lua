@@ -1,4 +1,5 @@
 local StarterGui = game:GetService("StarterGui")
+local TweenService = game:GetService("TweenService")
 
 StarterGui:SetCore("SendNotification", {
     Title = "Bozak :)",
