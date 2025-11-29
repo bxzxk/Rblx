@@ -1,6 +1,3 @@
--- wait for the useless loading screen
-task.wait(5.5)
-
 loadstring(game:HttpGet("https://raw.githubusercontent.com/bxzxk/Rblx/refs/heads/main/bsbossjumpbase.lua"))()
 
 -- failsafe
