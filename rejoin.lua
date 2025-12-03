@@ -5,7 +5,7 @@ local placeId = game.PlaceId
 
 local function reconnect()
     while true do
-        task.wait(15)
+        task.wait(5)
         local success, err = pcall(function()
             TeleportService:Teleport(placeId)
         end)
@@ -21,5 +21,6 @@ GuiService.ErrorMessageChanged:Connect(function()
     task.wait(2)
     reconnect()
 end)
+
 
 
