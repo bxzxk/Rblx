@@ -8,6 +8,8 @@ local placeId = game.PlaceId
 local reconnecting = false
 local retryDelay = 5
 
+task.wait(60) -- spam rejoin prevention for late loading games
+
 local function reconnect()
     if reconnecting then return end
     reconnecting = true
@@ -73,3 +75,4 @@ GuiService.ErrorMessageChanged:Connect(function()
     task.wait(2)
     reconnect()
 end) ]]--
+
