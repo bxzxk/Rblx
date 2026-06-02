@@ -98,7 +98,7 @@ while true do
             rerollRemote:FireServer(false)
         end
     else
-        print("Arrow Used, gameUi standReroll not found")
+        print("Arrow Used, Stand menu not found")
     end
 end
 
