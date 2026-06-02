@@ -24,7 +24,7 @@ local function scanStandNames(standReroll, screenCenter)
             
             local isJunk = false
             if #text == 0 or #text > 25 then
-                isJunk = true -- Filters out empty spaces and long paragraph descriptions
+                isJunk = true
             else
                 for _, word in ipairs(exclusions) do
                     if string.find(textLower, word) then isJunk = true break end
@@ -43,7 +43,8 @@ local function scanStandNames(standReroll, screenCenter)
             end
         end
     end
-    
+
+    -- screen resolve
     table.sort(leftElements, function(a, b) return a.AbsolutePosition.Y < b.AbsolutePosition.Y end)
     table.sort(rightElements, function(a, b) return a.AbsolutePosition.Y < b.AbsolutePosition.Y end)
     
@@ -55,7 +56,7 @@ end
 
 print("Pale Snake Finder started - Bozak")
 
--- MAIN TIMER LOOP
+-- main loop
 while true do
     print("Arrow used 30 seconds")
     task.wait(25)
@@ -73,14 +74,16 @@ while true do
     local standReroll = reactFolder:FindFirstChild("standReroll")
     if standReroll and standReroll.Enabled then
         local screenCenter = standReroll.AbsoluteSize.X / 2
-        
+
+        -- scraper
         local currentStand, rolledStand = scanStandNames(standReroll, screenCenter)
         
         print("----------------------------------------")
         print("[ROLL LOG] Current Stand: " .. currentStand)
         print("[ROLL LOG] Rolled Stand:  " .. rolledStand)
         print("----------------------------------------")
-        
+
+        -- logic
         if string.find(string.lower(currentStand), "pale snake") then
             print("Pale Snake found as current, Terminating.")
             rerollRemote:FireServer(false)
