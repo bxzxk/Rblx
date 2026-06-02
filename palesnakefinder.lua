@@ -8,13 +8,14 @@ local reactFolder = playerGui:WaitForChild("react")
 local networkFolder = ReplicatedStorage:WaitForChild("../out/acc/shared/network@eventDefinitions")
 local rerollRemote = networkFolder:WaitForChild("dungeonResolveStandReroll")
 local arrowRemote = networkFolder:WaitForChild("dungeonUseRequiemArrow")
+local settingsRemote = networkFolder:WaitForChild("setSetting")
 
 local function scanStandNames(standReroll, screenCenter)
     local leftElements = {}
     local rightElements = {}
     
     local exclusions = {"current", "new", "dmg", "hp", "party", "cap", "arrow", "rarity", "multiplier", "strongest", "take new", "keep current", "100%", "80%"}
-    local rarities = {"basic", "gold", "rainbow", "secret"}
+    local rarities = {"basic", "gold", "rainbow", "secret", "rare", "epic", "legendary", "mythic", "common", "uncommon", "unusual", "shiny"}
 
     for _, element in pairs(standReroll:GetDescendants()) do
         if element:IsA("TextLabel") or element:IsA("TextButton") then
@@ -23,7 +24,7 @@ local function scanStandNames(standReroll, screenCenter)
             
             local isJunk = false
             if #text == 0 or #text > 25 then
-                isJunk = true
+                isJunk = true -- Filters out empty spaces and long paragraph descriptions
             else
                 for _, word in ipairs(exclusions) do
                     if string.find(textLower, word) then isJunk = true break end
@@ -43,7 +44,6 @@ local function scanStandNames(standReroll, screenCenter)
         end
     end
     
-
     table.sort(leftElements, function(a, b) return a.AbsolutePosition.Y < b.AbsolutePosition.Y end)
     table.sort(rightElements, function(a, b) return a.AbsolutePosition.Y < b.AbsolutePosition.Y end)
     
@@ -53,18 +53,19 @@ local function scanStandNames(standReroll, screenCenter)
     return currentName, newName
 end
 
-print("Loop On")
+print("Pale Snake Finder started - Bozak")
 
--- main loop
+-- MAIN TIMER LOOP
 while true do
-    print("Arrow Used waiting 30 secs")
-    task.wait(20)
-    print("10 seconds left")
+    print("Arrow used 30 seconds")
+    task.wait(25)
+    
+    print("hiding battle, 5 seconds")
+    settingsRemote:FireServer("show_battles", false)
+    
     task.wait(5)
-    print("5 seconds")
-    task.wait(5)
-
-    print("using arrow")
+    
+    print("Using Arrow")
     arrowRemote:FireServer()
     
     task.wait(1.5)
@@ -73,32 +74,29 @@ while true do
     if standReroll and standReroll.Enabled then
         local screenCenter = standReroll.AbsoluteSize.X / 2
         
-        -- name scraper
         local currentStand, rolledStand = scanStandNames(standReroll, screenCenter)
         
-        -- log
         print("----------------------------------------")
         print("[ROLL LOG] Current Stand: " .. currentStand)
         print("[ROLL LOG] Rolled Stand:  " .. rolledStand)
         print("----------------------------------------")
         
-        -- eval
         if string.find(string.lower(currentStand), "pale snake") then
-            print("Pale Snake found as current, Terminating")
+            print("Pale Snake found as current, Terminating.")
             rerollRemote:FireServer(false)
             break
             
         elseif string.find(string.lower(rolledStand), "pale snake") then
-            print("Pale Snake found, Terminating")
+            print("Pale Snake found, Terminating.")
             rerollRemote:FireServer(true)
             break
             
         else
-            print("Pale Snake not found, Continuing")
+            print("Pale Snake not found, Continuing.")
             rerollRemote:FireServer(false)
         end
     else
-        print("Arrow Used, Stand menu not found")
+        print("Arrow Used, Stand Menu not found, Continuing.")
     end
 end
 
