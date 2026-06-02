@@ -15,7 +15,7 @@ local function scanStandNames(standReroll, screenCenter)
     local rightElements = {}
     
     local exclusions = {"current", "new", "dmg", "hp", "party", "cap", "arrow", "rarity", "multiplier", "strongest", "take new", "keep current", "100%", "80%"}
-    local rarities = {"basic", "gold", "rainbow", "secret", "rare", "epic", "legendary", "mythic", "common", "uncommon", "unusual", "shiny"}
+    local rarities = {"basic", "gold", "rainbow", "secret""}
 
     for _, element in pairs(standReroll:GetDescendants()) do
         if element:IsA("TextLabel") or element:IsA("TextButton") then
